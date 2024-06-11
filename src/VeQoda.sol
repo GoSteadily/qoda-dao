@@ -179,8 +179,8 @@ contract VeQoda is
 
                 if (methodBytes == method) {
                     // update token amount and timestamp-related cached value
-                    veEmissions[j].tokenAmountTime -=
-                        info.amount * lastUpdateSec - (info.amount - amount) * block.timestamp;
+                    veEmissions[j].tokenAmountTime =
+                        (veEmissions[j].tokenAmountTime + (info.amount - amount) * time) - info.amount * lastUpdateSec;
                     veEmissions[j].tokenAmount -= amount;
                 } else {
                     // update timestamp-related cached value

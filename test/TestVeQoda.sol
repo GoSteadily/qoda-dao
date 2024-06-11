@@ -345,6 +345,59 @@ contract TestVeQoda is Test {
         vm.stopPrank();
     }
 
+    function testUnstakingSmallAmount() public {
+        // Stake Qoda as user1
+        stake(_user1, vanillaMethod, 1e6);
+        stake(_user1, lpMethod, 1e12);
+        vm.warp(TIME_NOW_SECS + 86400);
+
+        // Unstake tiny amount
+        vm.startPrank(_user1);
+        veQoda.unstake(vanillaMethod, 1);
+        vm.stopPrank();
+
+        StakingStructs.StakingInfo memory vanillaInfo = veQoda.userStakingInfo(_user1, vanillaMethod);
+        StakingStructs.StakingInfo memory lpInfo = veQoda.userStakingInfo(_user1, lpMethod);
+
+        // Make sure veToken balance is reset to 0 for both
+        assertEq(veQoda.balanceOf(_user1), 0);
+        assertEq(vanillaInfo.amountVe, 0);
+        assertEq(lpInfo.amountVe, 0);
+
+        // Make sure token balance is adjusted accordingly
+        assertEq(vanillaInfo.amount, 1e6 - 1);
+        assertEq(lpInfo.amount, 1e12);
+    }
+
+    function testUnstakingInDifferentEmissionRate() public {
+        // Stake Qoda as both user1 and user2 using vanilla method
+        stake(_user1, vanillaMethod, 1e6);
+        stake(_user2, vanillaMethod, 4e6);
+
+        // Default ve distribution is 1 ve per Qoda per day
+        // After one day, ve distribution changes from 1 to 3 ve per Qoda per day
+        // After two days, ve distribution changes from 3 to 2 ve per Qoda per day
+        vm.startPrank(_admin);
+        veQoda._setStakingMethod(vanillaMethod, address(qodaToken), 3e6, TIME_NOW_SECS + 86400);
+        veQoda._setStakingMethod(vanillaMethod, address(qodaToken), 2e6, TIME_NOW_SECS + 86400 * 2);
+        vm.stopPrank();
+
+        // Move time by 5 days and User2 unstakes 1 Qoda token
+        vm.warp(TIME_NOW_SECS + 86400 * 5);
+        vm.prank(_user2);
+        veQoda.unstake(vanillaMethod, 1e6);
+
+        // At T = 5, User 1 balance will be
+        //   1 Qoda * 1 days * 1 ve per day
+        // + 1 Qoda * 1 days * 3 ve per day
+        // + 1 Qoda * 3 days * 2 ve per day
+        // = 10 ve
+        // User 2 balance will be 0 ve as unstaking has just been done
+        assertEq(veQoda.totalVe(TIME_NOW_SECS + 86400 * 5), 10e18);
+        assertEq(veQoda.accountVe(_user1, TIME_NOW_SECS + 86400 * 5), 10e18);
+        assertEq(veQoda.accountVe(_user2, TIME_NOW_SECS + 86400 * 5), 0);
+    }
+
     function testUnstakingAllRemoveUser() public {
         // Make sure user does not exist beforehand
         vm.startPrank(_admin);
